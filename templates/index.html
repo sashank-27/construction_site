@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Construction Detection System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: #dbeafe;
+            --danger: #dc2626;
+            --danger-light: #fee2e2;
+            --success: #16a34a;
+            --success-light: #dcfce7;
+            --warning: #ca8a04;
+            --warning-light: #fef9c3;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --radius-sm: 0.125rem;
+            --radius: 0.25rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --radius-xl: 0.75rem;
+            --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--gray-100);
+            color: var(--gray-800);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .app-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .app-title h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .app-logo {
+            color: var(--primary);
+            font-size: 1.75rem;
+        }
+
+        .app-status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-indicator.active {
+            background-color: var(--success-light);
+            color: var(--success);
+        }
+
+        .status-indicator.error {
+            background-color: var(--danger-light);
+            color: var(--danger);
+        }
+
+        .status-indicator.initializing {
+            background-color: var(--warning-light);
+            color: var(--warning);
+        }
+
+        .last-update {
+            font-size: 0.875rem;
+            color: var(--gray-500);
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            height: 100%;
+        }
+
+        .card-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header h2 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .video-controls {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--gray-200);
+            background-color: white;
+        }
+
+        .source-controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius);
+            font-weight: 500;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            border: none;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid var(--gray-300);
+            color: var(--gray-700);
+        }
+
+        .btn-outline:hover {
+            background-color: var(--gray-100);
+            border-color: var(--gray-400);
+        }
+
+        .btn-icon {
+            padding: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .video-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .video-property {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.375rem 0.75rem;
+            background-color: var(--gray-100);
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+        }
+
+        .property-label {
+            color: var(--gray-600);
+            font-weight: 500;
+        }
+
+        .property-value {
+            font-weight: 500;
+            color: var(--gray-800);
+        }
+
+        .video-wrapper {
+            position: relative;
+            flex-grow: 1;
+            overflow: hidden;
+            min-height: 400px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--gray-50);
+        }
+
+        .video-feed {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .detection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .upload-progress {
+            height: 4px;
+            background-color: var(--gray-200);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 0.75rem;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary);
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            padding: 1.25rem;
+            background-color: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .stat-icon {
+            font-size: 1.25rem;
+            padding: 0.5rem;
+            background-color: var(--primary-light);
+            color: var(--primary);
+            border-radius: var(--radius);
+            margin-bottom: 0.5rem;
+            align-self: flex-start;
+        }
+
+        .statistics-section {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .violations-list {
+            overflow-y: auto;
+            max-height: 400px;
+            padding: 0.5rem;
+        }
+
+        .violation-item {
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: var(--radius-md);
+            background-color: white;
+            border-left: 4px solid var(--danger);
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+
+        .violation-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .violation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .violation-id {
+            font-weight: 600;
+            color: var(--danger);
+        }
+
+        .violation-time {
+            font-size: 0.75rem;
+            color: var(--gray-500);
+        }
+
+        .violation-type {
+            font-weight: 600;
+            color: var(--danger);
+            margin-bottom: 0.25rem;
+        }
+
+        .violation-count {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .email-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius-sm);
+            margin-top: 0.5rem;
+        }
+
+        .email-status.sent {
+            background-color: var(--success-light);
+            color: var(--success);
+        }
+
+        .email-status.error {
+            background-color: var(--danger-light);
+            color: var(--danger);
+        }
+
+        .email-status.pending {
+            background-color: var(--warning-light);
+            color: var(--warning);
+        }
+
+        .error-message {
+            padding: 1rem;
+            background-color: var(--danger-light);
+            color: var(--danger);
+            border-radius: var(--radius);
+            margin: 1rem;
+            display: none;
+        }
+
+        .permission-help {
+            padding: 1rem;
+            background-color: var(--gray-100);
+            border-radius: var(--radius);
+            margin: 1rem;
+            font-size: 0.875rem;
+            display: none;
+        }
+
+        .permission-help ol {
+            margin-top: 0.5rem;
+            padding-left: 1.25rem;
+        }
+
+        .permission-help li {
+            margin-bottom: 0.25rem;
+        }
+
+        .notification {
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius-md);
+            background-color: var(--danger-light);
+            color: var(--danger);
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out forwards;
+            max-width: 400px;
+        }
+
+        .notification-icon {
+            font-size: 1.25rem;
+        }
+
+        .notification-content {
+            flex-grow: 1;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .notification-message {
+            font-size: 0.875rem;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .video-info {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .source-controls {
+                flex-wrap: wrap;
+            }
+        }
+
+        .alert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px;
+            border-radius: var(--radius-md);
+            background-color: var(--danger-light);
+            color: var(--danger);
+            box-shadow: var(--shadow-md);
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out forwards, slideOut 0.3s ease-in forwards 4.7s;
+        }
+
+        #violationsCard { position: relative; }
+        #violationsCard .alert {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="app-title">
+                <div class="app-logo">
+                    <i class="fas fa-hard-hat"></i>
+                </div>
+                <h1>PPE Detection System</h1>
+            </div>
+            <div class="app-status">
+                <div class="status-indicator initializing" id="cameraStatus">
+                    <i class="fas fa-circle"></i>
+                    <span>Initializing...</span>
+                </div>
+                <div class="last-update" id="lastUpdate">Last update: --:--:--</div>
+            </div>
+        </div>
+        
+        <div class="main-layout">
+            <div class="card">
+                <div class="video-section">
+                    <div class="video-controls">
+                        <div class="source-controls">
+                            <button id="switchToCamera" class="btn btn-primary">
+                                <i class="fas fa-video"></i>
+                                Live Camera
+                            </button>
+                            <label for="videoUpload" class="btn btn-outline">
+                                <i class="fas fa-upload"></i>
+                                Upload Video
+                            </label>
+                            <input type="file" id="videoUpload" accept="video/*" style="display: none;">
+                        </div>
+                        <div class="video-info">
+                            <div class="video-property">
+                                <i class="fas fa-camera"></i>
+                                <span class="property-label">Source:</span>
+                                <span class="property-value" id="videoSource">Camera</span>
+                            </div>
+                            <div class="video-property">
+                                <i class="fas fa-film"></i>
+                                <span class="property-label">FPS:</span>
+                                <span class="property-value" id="videoFPS">-</span>
+                            </div>
+                            <div class="video-property">
+                                <i class="fas fa-clock"></i>
+                                <span class="property-label">Duration:</span>
+                                <span class="property-value" id="videoDuration">-</span>
+                            </div>
+                        </div>
+                        <div class="upload-progress" style="display: none;">
+                            <div class="progress-bar"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="video-wrapper">
+                        <img id="videoFeed" class="video-feed" src="{{ url_for('video_feed') }}" alt="Video Feed">
+                        <canvas id="detectionOverlay" class="detection-overlay"></canvas>
+                    </div>
+                    
+                    <div class="error-message" id="errorMessage">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Camera access error. Please check your camera permissions.
+                    </div>
+                    
+                    <div class="permission-help" id="permissionHelp">
+                        <strong>To fix camera access on macOS:</strong>
+                        <ol>
+                            <li>Open System Preferences</li>
+                            <li>Go to Security & Privacy</li>
+                            <li>Click on the Privacy tab</li>
+                            <li>Select Camera from the left sidebar</li>
+                            <li>Check the box next to your browser or Terminal</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="statistics-section">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-hard-hat"></i>
+                        </div>
+                        <div class="stat-value" id="hardhatCount">0</div>
+                        <div class="stat-label">Hardhats Detected</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-vest"></i>
+                        </div>
+                        <div class="stat-value" id="vestCount">0</div>
+                        <div class="stat-label">Safety Vests</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="stat-value" id="personCount">0</div>
+                        <div class="stat-label">People Detected</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-head-side-mask"></i>
+                        </div>
+                        <div class="stat-value" id="maskCount">0</div>
+                        <div class="stat-label">Masks Detected</div>
+                    </div>
+                </div>
+                
+                <div class="card" id="violationsCard">
+                    <div class="card-header">
+                        <h2>Safety Violations</h2>
+                        <div class="badge" style="padding: 0.25rem 0.5rem; background-color: var(--danger-light); color: var(--danger); font-weight: 500; border-radius: var(--radius);">
+                            Total: <span id="totalViolations">0</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="violationsList" class="violations-list">
+                            <!-- Violations will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentVideoSource = 'camera';
+        let videoElement = document.getElementById('videoFeed');
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 5;
+        const RECONNECT_DELAY = 2000; // 2 seconds
+
+        function updateVideoFeed() {
+            const timestamp = new Date().getTime();
+            videoElement.src = "{{ url_for('video_feed') }}?" + timestamp;
+        }
+
+        function handleVideoError() {
+            console.error('Video feed error');
+            const cameraStatus = document.getElementById('cameraStatus');
+            cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Error</span>';
+            cameraStatus.className = 'status-indicator error';
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('permissionHelp').style.display = 'block';
+
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                setTimeout(() => {
+                    console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                    updateVideoFeed();
+                }, RECONNECT_DELAY);
+            }
+        }
+
+        async function switchToCamera() {
+            currentVideoSource = 'camera';
+            document.getElementById('videoSource').textContent = 'Camera';
+            document.getElementById('videoFPS').textContent = '-';
+            document.getElementById('videoDuration').textContent = '-';
+            reconnectAttempts = 0;
+            
+            try {
+                const response = await fetch('/switch_to_camera', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                updateVideoFeed();
+                
+                // Update UI to show camera is active
+                const cameraStatus = document.getElementById('cameraStatus');
+                cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Active</span>';
+                cameraStatus.className = 'status-indicator active';
+            } catch (error) {
+                console.error('Error switching to camera:', error);
+                showNotification('Camera Error', 'Failed to switch to camera. Please check your device.', 'error');
+            }
+        }
+
+        document.getElementById('switchToCamera').addEventListener('click', switchToCamera);
+
+        document.getElementById('videoUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                currentVideoSource = 'file';
+                reconnectAttempts = 0;
+                
+                const formData = new FormData();
+                formData.append('video', file);
+                
+                const progressDiv = document.querySelector('.upload-progress');
+                const progressBar = document.querySelector('.progress-bar');
+                progressDiv.style.display = 'block';
+                
+                // Show upload progress
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/upload_video', true);
+                
+                xhr.upload.onprogress = function(e) {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        progressBar.style.width = percentComplete + '%';
+                    }
+                };
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data.error) {
+                            showNotification('Upload Error', data.error, 'error');
+                            switchToCamera(); // Fallback to camera on error
+                        } else {
+                            document.getElementById('videoSource').textContent = file.name;
+                            document.getElementById('videoFPS').textContent = data.fps.toFixed(2);
+                            document.getElementById('videoDuration').textContent = formatDuration(data.duration);
+                            
+                            // Update camera status for file
+                            const cameraStatus = document.getElementById('cameraStatus');
+                            cameraStatus.innerHTML = '<i class="fas fa-file-video"></i><span>Video File</span>';
+                            cameraStatus.className = 'status-indicator active';
+                            
+                            updateVideoFeed();
+                            showNotification('Upload Complete', 'Video uploaded successfully!', 'success');
+                        }
+                    } else {
+                        showNotification('Upload Error', 'Server error during upload', 'error');
+                        switchToCamera(); // Fallback to camera on error
+                    }
+                    progressDiv.style.display = 'none';
+                };
+                
+                xhr.onerror = function() {
+                    console.error('Error uploading video');
+                    showNotification('Upload Error', 'Network error during upload', 'error');
+                    switchToCamera(); // Fallback to camera on error
+                    progressDiv.style.display = 'none';
+                };
+                
+                xhr.send(formData);
+            }
+        });
+
+        // Add error handling for the video feed
+        videoElement.addEventListener('error', handleVideoError);
+
+        // Initialize camera on page load
+        switchToCamera();
+
+        // Periodically refresh the video feed to prevent disconnection
+        setInterval(() => {
+            if (currentVideoSource === 'camera') {
+                updateVideoFeed();
+            }
+        }, 30000); // Refresh every 30 seconds
+
+        function updateStats() {
+            fetch('/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('hardhatCount').textContent = data.hardhat_count;
+                    document.getElementById('vestCount').textContent = data.vest_count;
+                    document.getElementById('personCount').textContent = data.person_count;
+                    document.getElementById('maskCount').textContent = data.mask_count;
+                    document.getElementById('totalViolations').textContent = data.total_violations;
+                    document.getElementById('lastUpdate').textContent = `Last update: ${new Date(data.last_update).toLocaleTimeString()}`;
+                    
+                    // Update camera status
+                    const cameraStatus = document.getElementById('cameraStatus');
+                    const errorMessage = document.getElementById('errorMessage');
+                    const permissionHelp = document.getElementById('permissionHelp');
+                    
+                    if (currentVideoSource === 'camera') {
+                        if (data.camera_status === 'active') {
+                            cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Active</span>';
+                            cameraStatus.className = 'status-indicator active';
+                        } else if (data.camera_status === 'error') {
+                            cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Error</span>';
+                            cameraStatus.className = 'status-indicator error';
+                        } else if (data.camera_status === 'initializing') {
+                            cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Initializing...</span>';
+                            cameraStatus.className = 'status-indicator initializing';
+                        }
+                    }
+                    
+                    if (data.camera_status === 'error') {
+                        errorMessage.style.display = 'block';
+                        permissionHelp.style.display = 'block';
+                    } else {
+                        errorMessage.style.display = 'none';
+                        permissionHelp.style.display = 'none';
+                    }
+                    
+                    // Update violations list
+                    const violationsList = document.getElementById('violationsList');
+                    violationsList.innerHTML = '';
+                    
+                    data.violations.slice().reverse().forEach(violation => {
+                        const div = document.createElement('div');
+                        div.className = 'violation-item';
+                        
+                        const emailStatusClass = violation.email_status === 'sent' ? 'sent' : 
+                                               violation.email_status === 'error' ? 'error' : 'pending';
+                        
+                        div.innerHTML = `
+                            <div class="violation-header">
+                                <span class="violation-id">Violation #${violation.id}</span>
+                                <span class="violation-time">${new Date(violation.timestamp).toLocaleString()}</span>
+                            </div>
+                            <div class="violation-details">
+                                <div class="violation-type">${violation.type}</div>
+                                <div class="violation-count">People Detected: ${violation.person_count}</div>
+                                <div class="email-status ${emailStatusClass}">
+                                    Email Status: ${violation.email_status}
+                                </div>
+                            </div>
+                        `;
+                        violationsList.appendChild(div);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching stats:', error);
+                    const cameraStatus = document.getElementById('cameraStatus');
+                    cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Error</span>';
+                    cameraStatus.className = 'status-indicator error';
+                });
+        }
+
+        function showNotification(title, message, type = 'info') {
+            // Remove any existing notifications
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(notification => {
+                notification.remove();
+            });
+            
+            // Create new notification
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            
+            let iconClass = 'fa-info-circle';
+            if (type === 'success') {
+                notification.style.backgroundColor = 'var(--success-light)';
+                notification.style.color = 'var(--success)';
+                iconClass = 'fa-check-circle';
+            } else if (type === 'error') {
+                notification.style.backgroundColor = 'var(--danger-light)';
+                notification.style.color = 'var(--danger)';
+                iconClass = 'fa-exclamation-circle';
+            } else if (type === 'warning') {
+                notification.style.backgroundColor = 'var(--warning-light)';
+                notification.style.color = 'var(--warning)';
+                iconClass = 'fa-exclamation-triangle';
+            }
+            
+            notification.innerHTML = `
+                <div class="notification-icon">
+                    <i class="fas ${iconClass}"></i>
+                </div>
+                <div class="notification-content">
+                    <div class="notification-title">${title}</div>
+                    <div class="notification-message">${message}</div>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove notification after 5 seconds
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-in forwards';
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }, 5000);
+        }
+
+        setInterval(updateStats, 1000);
+        updateStats(); // Initial update
+    </script>
+</body>
+</html>
