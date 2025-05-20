@@ -30,17 +30,14 @@ if platform.system() == 'Darwin':
 
 load_dotenv()
 
-# Azure Blob Storage configuration
 AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
 AZURE_STORAGE_CONTAINER_NAME = os.getenv('AZURE_STORAGE_CONTAINER_NAME', 'violation-images')
 
-# Initialize Azure Blob Service Client
 blob_service_client = None
 if AZURE_STORAGE_CONNECTION_STRING:
     try:
         blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
         container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
-        # Create container if it doesn't exist
         if not container_client.exists():
             container_client.create_container()
         logger.info("Azure Blob Storage connection established successfully")
@@ -55,43 +52,15 @@ class IterableSimpleNamespace(SimpleNamespace):
     def __iter__(self):
         return iter(vars(self).items())
 
-def custom_load_model(model_path):
-    """Custom model loading function that uses weights_only=False"""
-    try:
-        # Load the model with weights_only=False
-        ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
-        # Create a new YOLO model instance
-        model = YOLO(model_path)
-        # Update the model's state dict with the loaded checkpoint
-        if hasattr(model, 'model'):
-            model.model.load_state_dict(ckpt['model'].state_dict())
-        return model
-    except Exception as e:
-        logger.error(f"Error in custom model loading: {str(e)}")
-        raise
-
 # Initialize model with error handling
 try:
     logger.info("Loading YOLO model...")
-    model_path = os.path.join("Model", "ppe.pt")
+    model_path = os.path.join("Model", "base.pt")
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found at {model_path}")
     
-    # Add required classes to safe globals for PyTorch 2.6+
-    torch.serialization.add_safe_globals([
-        DetectionModel,
-        Sequential,
-        Conv,
-        C2f,
-        SPPF,
-        Detect,
-        Segment,
-        Pose,
-        Classify
-    ])
-    
-    # Load model using custom loading function
-    model = custom_load_model(model_path)
+    # Load model directly with YOLO
+    model = YOLO(model_path)
     logger.info("YOLO model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading YOLO model: {str(e)}")
