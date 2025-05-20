@@ -55,6 +55,21 @@ class IterableSimpleNamespace(SimpleNamespace):
     def __iter__(self):
         return iter(vars(self).items())
 
+def custom_load_model(model_path):
+    """Custom model loading function that uses weights_only=False"""
+    try:
+        # Load the model with weights_only=False
+        ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
+        # Create a new YOLO model instance
+        model = YOLO(model_path)
+        # Update the model's state dict with the loaded checkpoint
+        if hasattr(model, 'model'):
+            model.model.load_state_dict(ckpt['model'].state_dict())
+        return model
+    except Exception as e:
+        logger.error(f"Error in custom model loading: {str(e)}")
+        raise
+
 # Initialize model with error handling
 try:
     logger.info("Loading YOLO model...")
@@ -75,8 +90,8 @@ try:
         Classify
     ])
     
-    # Load model with specific version compatibility
-    model = YOLO(model_path)
+    # Load model using custom loading function
+    model = custom_load_model(model_path)
     logger.info("YOLO model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading YOLO model: {str(e)}")
