@@ -51,7 +51,7 @@ app = Flask(__name__)
 
 try:
     import torch
-    model = YOLO("Model/ppe.pt", task='detect')
+    model = YOLO("Model/ppe.pt")
     logger.info("YOLO model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading YOLO model: {str(e)}")
@@ -206,8 +206,21 @@ def process_frame(frame):
 def get_video_source():
     global video_capture, current_video_source, is_uploaded_video
     if current_video_source is None:
-        video_capture = cv2.VideoCapture(0)
-        is_uploaded_video = False
+        try:
+            video_capture = cv2.VideoCapture(0)
+            if not video_capture.isOpened():
+                logger.warning("Could not open camera, creating a blank video source")
+                # Create a blank frame as fallback
+                blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(blank_frame, "No Camera Available", (100, 240), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                video_capture = None
+                current_video_source = "blank"
+            is_uploaded_video = False
+        except Exception as e:
+            logger.error(f"Error accessing camera: {str(e)}")
+            video_capture = None
+            current_video_source = "blank"
     return video_capture
 
 def release_video_source():
@@ -272,8 +285,19 @@ def generate_frames():
     global video_capture, is_uploaded_video
     
     cap = get_video_source()
-    if not cap.isOpened():
-        print("Error: Unable to access the video source.")
+    if cap is None and current_video_source == "blank":
+        # Generate blank frame
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(frame, "No Camera Available", (100, 240), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        return
+
+    if not cap or not cap.isOpened():
+        logger.error("Error: Unable to access the video source.")
         stats['camera_status'] = 'error'
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         draw_text_with_background(frame, "Video Source Error", (200, 240), font_scale=1, color=(255, 255, 255), bg_color=(0, 0, 0), alpha=0.8, padding=10)
@@ -327,7 +351,21 @@ def get_stats():
     stats_copy['violations'] = list(stats_copy['violations'])
     return jsonify(stats_copy)
 
+@app.route('/test')
+def test():
+    return jsonify({
+        'status': 'ok',
+        'port': os.environ.get('PORT', 10000),
+        'host': '0.0.0.0'
+    })
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    logger.info(f"Starting server on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False) 
+    port = int(os.environ.get('PORT', 10000))
+    logger.info(f"Starting server on host 0.0.0.0 and port {port}")
+    logger.info(f"Environment variables: PORT={os.environ.get('PORT')}")
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+        logger.info("Server started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start server: {str(e)}")
+        raise 
