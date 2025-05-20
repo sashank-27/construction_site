@@ -50,7 +50,8 @@ if AZURE_STORAGE_CONNECTION_STRING:
 app = Flask(__name__)
 
 try:
-    model = YOLO("Model/ppe.pt")
+    import torch
+    model = YOLO("Model/ppe.pt", task='detect')
     logger.info("YOLO model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading YOLO model: {str(e)}")
