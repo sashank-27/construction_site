@@ -15,6 +15,8 @@ from datetime import datetime
 import platform
 import logging
 import tempfile
+import torch
+from types import SimpleNamespace
 
 from azure.storage.blob import BlobServiceClient, ContentSettings
 logging.basicConfig(level=logging.INFO)
@@ -45,7 +47,24 @@ if AZURE_STORAGE_CONNECTION_STRING:
 
 app = Flask(__name__)
 
-model = YOLO("Model/ppe.pt")
+# Add IterableSimpleNamespace for compatibility
+class IterableSimpleNamespace(SimpleNamespace):
+    def __iter__(self):
+        return iter(vars(self).items())
+
+# Initialize model with error handling
+try:
+    logger.info("Loading YOLO model...")
+    model_path = os.path.join("Model", "ppe.pt")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file not found at {model_path}")
+    
+    # Load model with specific version compatibility
+    model = YOLO(model_path)
+    logger.info("YOLO model loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading YOLO model: {str(e)}")
+    raise
 
 MAX_VIOLATIONS = 50
 stats = {
