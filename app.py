@@ -19,6 +19,7 @@ import torch
 from types import SimpleNamespace
 from ultralytics.nn.tasks import DetectionModel
 from torch.nn.modules.container import Sequential
+from ultralytics.nn.modules import Conv, C2f, SPPF, Detect, Segment, Pose, Classify
 
 from azure.storage.blob import BlobServiceClient, ContentSettings
 logging.basicConfig(level=logging.INFO)
@@ -62,7 +63,17 @@ try:
         raise FileNotFoundError(f"Model file not found at {model_path}")
     
     # Add required classes to safe globals for PyTorch 2.6+
-    torch.serialization.add_safe_globals([DetectionModel, Sequential])
+    torch.serialization.add_safe_globals([
+        DetectionModel,
+        Sequential,
+        Conv,
+        C2f,
+        SPPF,
+        Detect,
+        Segment,
+        Pose,
+        Classify
+    ])
     
     # Load model with specific version compatibility
     model = YOLO(model_path)
