@@ -17,6 +17,7 @@ import logging
 import tempfile
 import torch
 from types import SimpleNamespace
+from ultralytics.nn.tasks import DetectionModel
 
 from azure.storage.blob import BlobServiceClient, ContentSettings
 logging.basicConfig(level=logging.INFO)
@@ -58,6 +59,9 @@ try:
     model_path = os.path.join("Model", "ppe.pt")
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found at {model_path}")
+    
+    # Add DetectionModel to safe globals for PyTorch 2.6+
+    torch.serialization.add_safe_globals([DetectionModel])
     
     # Load model with specific version compatibility
     model = YOLO(model_path)
