@@ -49,7 +49,12 @@ if AZURE_STORAGE_CONNECTION_STRING:
 
 app = Flask(__name__)
 
-model = YOLO("Model/ppe.pt")
+try:
+    model = YOLO("Model/ppe.pt")
+    logger.info("YOLO model loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading YOLO model: {str(e)}")
+    model = None
 
 MAX_VIOLATIONS = 50
 stats = {
@@ -81,6 +86,10 @@ def draw_text_with_background(frame, text, position, font_scale=0.4, color=(255,
 def process_frame(frame):
     global stats, already_reported_ids
 
+    if model is None:
+        draw_text_with_background(frame, "Model not loaded", (200, 240), font_scale=1, color=(255, 255, 255), bg_color=(0, 0, 0), alpha=0.8, padding=10)
+        return frame
+
     hardhat_count = 0
     vest_count = 0
     person_count = 0
@@ -89,8 +98,6 @@ def process_frame(frame):
 
     results = model(frame)
     detections = []
-
-
 
     for result in results:
         if result.boxes is not None:
