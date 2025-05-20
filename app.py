@@ -16,12 +16,6 @@ import platform
 import logging
 import tempfile
 
-from deep_sort_realtime.deepsort_tracker import DeepSort
-tracker = DeepSort(max_age=30)
-
-already_reported_ids = {}
-
-
 from azure.storage.blob import BlobServiceClient, ContentSettings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,15 +25,17 @@ if platform.system() == 'Darwin':
 
 load_dotenv()
 
+# Azure Blob Storage configuration
 AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
 AZURE_STORAGE_CONTAINER_NAME = os.getenv('AZURE_STORAGE_CONTAINER_NAME', 'violation-images')
 
+# Initialize Azure Blob Service Client
 blob_service_client = None
 if AZURE_STORAGE_CONNECTION_STRING:
     try:
         blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
         container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
-
+        # Create container if it doesn't exist
         if not container_client.exists():
             container_client.create_container()
         logger.info("Azure Blob Storage connection established successfully")
@@ -49,13 +45,7 @@ if AZURE_STORAGE_CONNECTION_STRING:
 
 app = Flask(__name__)
 
-try:
-    import torch
-    model = YOLO("Model/ppe.pt")
-    logger.info("YOLO model loaded successfully")
-except Exception as e:
-    logger.error(f"Error loading YOLO model: {str(e)}")
-    model = None
+model = YOLO("Model/ppe.pt")
 
 MAX_VIOLATIONS = 50
 stats = {
@@ -85,150 +75,157 @@ def draw_text_with_background(frame, text, position, font_scale=0.4, color=(255,
     cv2.putText(frame, text, (x, y), font, font_scale, color, thickness)
 
 def process_frame(frame):
-    global stats, already_reported_ids
-
-    if model is None:
-        draw_text_with_background(frame, "Model not loaded", (200, 240), font_scale=1, color=(255, 255, 255), bg_color=(0, 0, 0), alpha=0.8, padding=10)
-        return frame
-
+    global stats
+    
     hardhat_count = 0
     vest_count = 0
     person_count = 0
     mask_count = 0
+    no_hardhat_detected = False
+    no_vest_detected = False
+    no_mask_detected = False
+    person_detected = False
     violations_detected = []
 
+    # Colors 
+    colors = [
+        (255, 0, 0),  
+        (0, 255, 0),  
+        (0, 0, 255),  
+        (255, 255, 0),  
+        (255, 0, 255),  
+        (0, 255, 255),  
+        (128, 0, 128),  
+        (128, 128, 0), 
+        (0, 128, 128), 
+        (128, 128, 128)  
+    ]
+
     results = model(frame)
-    detections = []
 
     for result in results:
         if result.boxes is not None:
             for box in result.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-                conf = float(box.conf[0])
+                confidence = box.conf[0]
                 cls = int(box.cls[0])
-                label = model.names[cls]
-                if label == 'Person':
-                    detections.append(((x1, y1, x2, y2), conf, label, None))
+                label = f"{model.names[cls]} ({confidence:.2f})"
 
-    tracks = tracker.update_tracks(detections, frame=frame)
-    frame_copy = frame.copy()
+                color = colors[cls % len(colors)]
 
-    for result in results:
-        if result.boxes is not None:
-            for box in result.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
-                label = model.names[cls]
-                color = (0, 255, 255)
-
-                if label == "Hardhat":
-                    hardhat_count += 1
-                elif label == "NO-Hardhat":
-                    violations_detected.append(("No Hardhat", (x1, y1, x2, y2)))
-                elif label == "Safety Vest":
-                    vest_count += 1
-                elif label == "NO-Safety Vest":
-                    violations_detected.append(("No Safety Vest", (x1, y1, x2, y2)))
-                elif label == "Mask":
-                    mask_count += 1
-                elif label == "NO-Mask":
-                    violations_detected.append(("No Mask", (x1, y1, x2, y2)))
-                elif label == "Person":
-                    person_count += 1
-
+                # Draw the bounding box
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                draw_text_with_background(frame, f"{label} ({conf:.2f})", (x1, y1 - 10), font_scale=0.4, color=(255, 255, 255), bg_color=color, alpha=0.8, padding=4)
+                draw_text_with_background(frame, label, (x1, y1 - 10), font_scale=0.4, color=(255, 255, 255), bg_color=color, alpha=0.8, padding=4)
 
-    for track in tracks:
-        if not track.is_confirmed():
-            continue
-        track_id = track.track_id
-        l, t, r, b = map(int, track.to_ltrb())
-
-        if track_id not in already_reported_ids:
-            already_reported_ids[track_id] = set()
-
-        for (violation_type, (vx1, vy1, vx2, vy2)) in violations_detected:
-            if vx1 >= l and vx2 <= r and vy1 >= t and vy2 <= b:
-                if violation_type not in already_reported_ids[track_id]:
-                    already_reported_ids[track_id].add(violation_type)
-                    try:
-                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                        blob_name = f"violation_{track_id}_{timestamp}.jpg"
-                        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
-                            cv2.imwrite(temp_file.name, frame_copy)
-                            image_url = None
-                            if blob_service_client:
-                                container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
-                                with open(temp_file.name, "rb") as data:
-                                    blob_client = container_client.get_blob_client(blob_name)
-                                    blob_client.upload_blob(data, overwrite=True, content_settings=ContentSettings(content_type="image/jpeg"))
-                                    image_url = blob_client.url
-                            os.unlink(temp_file.name)
-
-                        violation = {
-                            'id': stats['total_violations'] + 1,
-                            'timestamp': datetime.now().isoformat(),
-                            'type': violation_type,
-                            'person_count': person_count,
-                            'image_url': image_url
-                        }
-
-                        stats['violations'].append(violation)
-                        stats['total_violations'] += 1
-                        logger.info(f"Violation recorded: {violation_type} by track_id {track_id}")
-                    except Exception as e:
-                        logger.error(f"Error processing violation: {str(e)}")
-                break
+                # Track detections
+                if model.names[cls] == "Hardhat":
+                    hardhat_count += 1
+                elif model.names[cls] == "NO-Hardhat":
+                    no_hardhat_detected = True
+                    violations_detected.append("No Hardhat")
+                elif model.names[cls] == "Safety Vest":
+                    vest_count += 1
+                elif model.names[cls] == "NO-Safety Vest":
+                    no_vest_detected = True
+                    violations_detected.append("No Safety Vest")
+                elif model.names[cls] == "Mask":
+                    mask_count += 1
+                elif model.names[cls] == "NO-Mask":
+                    no_mask_detected = True
+                    violations_detected.append("No Mask")
+                elif model.names[cls] == "Person":
+                    person_count += 1
+                    person_detected = True
 
     stats['hardhat_count'] = hardhat_count
     stats['vest_count'] = vest_count
-    stats['mask_count'] = mask_count
     stats['person_count'] = person_count
+    stats['mask_count'] = mask_count
     stats['last_update'] = datetime.now().isoformat()
     stats['camera_status'] = 'active'
 
-    y_position = 30
-    for text in [
+    if person_detected and violations_detected:
+        try:
+            # Generate a unique blob name
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            blob_name = f"violation_{timestamp}.jpg"
+            
+            # Save image to a temporary file
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+                cv2.imwrite(temp_file.name, frame)
+                
+                # Upload to Azure Blob Storage if configured
+                if blob_service_client:
+                    try:
+                        container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+                        with open(temp_file.name, "rb") as data:
+                            blob_client = container_client.get_blob_client(blob_name)
+                            blob_client.upload_blob(
+                                data,
+                                overwrite=True,
+                                content_settings=ContentSettings(content_type="image/jpeg")
+                            )
+                        image_url = blob_client.url
+                        logger.info(f"Image uploaded to Azure Blob Storage: {image_url}")
+                    except Exception as e:
+                        logger.error(f"Failed to upload image to Azure Blob Storage: {str(e)}")
+                        image_url = None
+                else:
+                    image_url = None
+                
+                # Clean up temporary file
+                os.unlink(temp_file.name)
+            
+            for violation_type in violations_detected:
+                violation = {
+                    'id': stats['total_violations'] + 1,
+                    'timestamp': datetime.now().isoformat(),
+                    'type': violation_type,
+                    'person_count': person_count,
+                    'image_url': image_url
+                }
+                
+                stats['violations'].append(violation)
+                stats['total_violations'] += 1
+                
+                logger.info(f"Safety violation detected: {violation_type}")
+        except Exception as e:
+            logger.error(f"Error processing violation: {str(e)}")
+
+    sideboard_text = [
         f"Hardhats: {hardhat_count}",
         f"Safety Vests: {vest_count}",
         f"Masks: {mask_count}",
         f"People: {person_count}",
         f"Total Violations: {stats['total_violations']}"
-    ]:
+    ]
+
+    y_position = 30
+    for text in sideboard_text:
         draw_text_with_background(frame, text, (10, y_position), font_scale=0.5, color=(255, 255, 255), bg_color=(0, 0, 0), alpha=0.7, padding=5)
         y_position += 30
 
     return frame
 
-
 def get_video_source():
     global video_capture, current_video_source, is_uploaded_video
     if current_video_source is None:
-        try:
-            video_capture = cv2.VideoCapture(0)
-            if not video_capture.isOpened():
-                logger.warning("Could not open camera, creating a blank video source")
-                # Create a blank frame as fallback
-                blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                cv2.putText(blank_frame, "No Camera Available", (100, 240), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                video_capture = None
-                current_video_source = "blank"
-            is_uploaded_video = False
-        except Exception as e:
-            logger.error(f"Error accessing camera: {str(e)}")
-            video_capture = None
-            current_video_source = "blank"
+        video_capture = cv2.VideoCapture(0)
+        is_uploaded_video = False
     return video_capture
 
 def release_video_source():
     global video_capture, current_video_source
-    if video_capture is not None:
-        video_capture.release()
-        video_capture = None
-    current_video_source = None
+    try:
+        if video_capture is not None:
+            video_capture.release()
+            video_capture = None
+        if current_video_source is not None and os.path.exists(current_video_source):
+            os.unlink(current_video_source)
+        current_video_source = None
+        stats['camera_status'] = 'inactive'
+    except Exception as e:
+        logger.error(f"Error releasing video source: {str(e)}")
 
 @app.route('/upload_video', methods=['POST'])
 def upload_video():
@@ -241,63 +238,73 @@ def upload_video():
     if video_file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
-
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-    video_file.save(temp_file.name)
-
-
-    release_video_source()
-    
-
-    current_video_source = temp_file.name
-    video_capture = cv2.VideoCapture(current_video_source)
-    
-    if not video_capture.isOpened():
-        return jsonify({'error': 'Could not open video file'}), 400
-
-
-    fps = video_capture.get(cv2.CAP_PROP_FPS)
-    frame_count = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = frame_count / fps if fps > 0 else 0
-    
-    is_uploaded_video = True
-    
-    return jsonify({
-        'message': 'Video uploaded successfully',
-        'fps': fps,
-        'frame_count': frame_count,
-        'duration': duration
-    })
+    try:
+        # Create a temporary file to store the uploaded video
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        video_file.save(temp_file.name)
+        
+        # Release any existing video source
+        release_video_source()
+        
+        # Set up the new video source
+        current_video_source = temp_file.name
+        video_capture = cv2.VideoCapture(current_video_source)
+        
+        if not video_capture.isOpened():
+            os.unlink(temp_file.name)  # Clean up the temp file
+            return jsonify({'error': 'Could not open video file'}), 400
+        
+        # Get video properties
+        fps = video_capture.get(cv2.CAP_PROP_FPS)
+        frame_count = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = frame_count / fps if fps > 0 else 0
+        
+        is_uploaded_video = True
+        stats['camera_status'] = 'active'
+        
+        return jsonify({
+            'message': 'Video uploaded successfully',
+            'fps': fps,
+            'frame_count': frame_count,
+            'duration': duration,
+            'status': 'success'
+        })
+    except Exception as e:
+        logger.error(f"Error uploading video: {str(e)}")
+        if 'temp_file' in locals():
+            os.unlink(temp_file.name)  # Clean up the temp file
+        return jsonify({'error': 'Failed to process video file'}), 500
 
 @app.route('/switch_to_camera', methods=['POST'])
 def switch_to_camera():
     global current_video_source, video_capture, is_uploaded_video
     
-    release_video_source()
-    
-    current_video_source = None
-    video_capture = cv2.VideoCapture(0)
-    is_uploaded_video = False
-    
-    return jsonify({'message': 'Switched to camera feed'})
+    try:
+        release_video_source()
+        
+        current_video_source = None
+        video_capture = cv2.VideoCapture(0)
+        
+        if not video_capture.isOpened():
+            return jsonify({'error': 'Could not access camera'}), 400
+            
+        is_uploaded_video = False
+        stats['camera_status'] = 'active'
+        
+        return jsonify({
+            'message': 'Switched to camera feed',
+            'status': 'success'
+        })
+    except Exception as e:
+        logger.error(f"Error switching to camera: {str(e)}")
+        return jsonify({'error': 'Failed to switch to camera'}), 500
 
 def generate_frames():
     global video_capture, is_uploaded_video
     
     cap = get_video_source()
-    if cap is None and current_video_source == "blank":
-        # Generate blank frame
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(frame, "No Camera Available", (100, 240), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        return
-
-    if not cap or not cap.isOpened():
-        logger.error("Error: Unable to access the video source.")
+    if not cap.isOpened():
+        print("Error: Unable to access the video source.")
         stats['camera_status'] = 'error'
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         draw_text_with_background(frame, "Video Source Error", (200, 240), font_scale=1, color=(255, 255, 255), bg_color=(0, 0, 0), alpha=0.8, padding=10)
@@ -351,21 +358,5 @@ def get_stats():
     stats_copy['violations'] = list(stats_copy['violations'])
     return jsonify(stats_copy)
 
-@app.route('/test')
-def test():
-    return jsonify({
-        'status': 'ok',
-        'port': os.environ.get('PORT', 10000),
-        'host': '0.0.0.0'
-    })
-
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    logger.info(f"Starting server on host 0.0.0.0 and port {port}")
-    logger.info(f"Environment variables: PORT={os.environ.get('PORT')}")
-    try:
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-        logger.info("Server started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start server: {str(e)}")
-        raise 
+    app.run(debug=True, port=5001) 

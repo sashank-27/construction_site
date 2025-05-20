@@ -525,6 +525,44 @@
             width: 90%;
             z-index: 10;
         }
+
+        .permission-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        .permission-box {
+            background-color: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .permission-box h3 {
+            margin-bottom: 1rem;
+            color: var(--gray-900);
+        }
+
+        .permission-box p {
+            margin-bottom: 1.5rem;
+            color: var(--gray-600);
+        }
+
+        .permission-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
@@ -550,8 +588,8 @@
                 <div class="video-section">
                     <div class="video-controls">
                         <div class="source-controls">
-                            <button id="switchToCamera" class="btn btn-primary">
-                                <i class="fas fa-video"></i>
+                            <button id="cameraBtn" class="btn btn-primary">
+                                <i class="fas fa-camera"></i>
                                 Live Camera
                             </button>
                             <label for="videoUpload" class="btn btn-outline">
@@ -562,19 +600,12 @@
                         </div>
                         <div class="video-info">
                             <div class="video-property">
-                                <i class="fas fa-camera"></i>
                                 <span class="property-label">Source:</span>
-                                <span class="property-value" id="videoSource">Camera</span>
+                                <span class="property-value" id="videoSource">Not selected</span>
                             </div>
                             <div class="video-property">
-                                <i class="fas fa-film"></i>
-                                <span class="property-label">FPS:</span>
-                                <span class="property-value" id="videoFPS">-</span>
-                            </div>
-                            <div class="video-property">
-                                <i class="fas fa-clock"></i>
-                                <span class="property-label">Duration:</span>
-                                <span class="property-value" id="videoDuration">-</span>
+                                <span class="property-label">Status:</span>
+                                <span class="property-value" id="videoStatus">Waiting for input</span>
                             </div>
                         </div>
                         <div class="upload-progress" style="display: none;">
@@ -657,12 +688,52 @@
         </div>
     </div>
 
+    <div class="permission-overlay" id="permissionOverlay">
+        <div class="permission-box">
+            <h3>Camera Access Required</h3>
+            <p>This application needs access to your camera to perform safety detection. Please allow camera access to continue.</p>
+            <div class="permission-buttons">
+                <button class="btn btn-primary" id="allowCamera">Allow Camera</button>
+                <button class="btn btn-outline" id="denyCamera">Deny</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentVideoSource = 'camera';
         let videoElement = document.getElementById('videoFeed');
         let reconnectAttempts = 0;
         const MAX_RECONNECT_ATTEMPTS = 5;
         const RECONNECT_DELAY = 2000; // 2 seconds
+
+        // Initialize all UI elements
+        const cameraBtn = document.getElementById('cameraBtn');
+        const videoUpload = document.getElementById('videoUpload');
+        const permissionOverlay = document.getElementById('permissionOverlay');
+        const allowCamera = document.getElementById('allowCamera');
+        const denyCamera = document.getElementById('denyCamera');
+        const videoSource = document.getElementById('videoSource');
+        const videoStatus = document.getElementById('videoStatus');
+        const cameraStatus = document.getElementById('cameraStatus');
+
+        // Format duration in seconds to MM:SS format
+        function formatDuration(seconds) {
+            if (!seconds || isNaN(seconds)) return '--:--';
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        // Check if camera permission is already granted
+        async function checkCameraPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop());
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
 
         function updateVideoFeed() {
             const timestamp = new Date().getTime();
@@ -671,7 +742,6 @@
 
         function handleVideoError() {
             console.error('Video feed error');
-            const cameraStatus = document.getElementById('cameraStatus');
             cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Error</span>';
             cameraStatus.className = 'status-indicator error';
             document.getElementById('errorMessage').style.display = 'block';
@@ -687,35 +757,72 @@
         }
 
         async function switchToCamera() {
-            currentVideoSource = 'camera';
-            document.getElementById('videoSource').textContent = 'Camera';
-            document.getElementById('videoFPS').textContent = '-';
-            document.getElementById('videoDuration').textContent = '-';
-            reconnectAttempts = 0;
-            
             try {
                 const response = await fetch('/switch_to_camera', {
                     method: 'POST'
                 });
                 const data = await response.json();
+                
                 if (data.error) {
                     throw new Error(data.error);
                 }
-                updateVideoFeed();
+
+                currentVideoSource = 'camera';
+                videoSource.textContent = 'Live Camera';
+                videoStatus.textContent = 'Active';
+                videoStatus.style.color = 'var(--success)';
                 
-                // Update UI to show camera is active
-                const cameraStatus = document.getElementById('cameraStatus');
                 cameraStatus.innerHTML = '<i class="fas fa-circle"></i><span>Active</span>';
                 cameraStatus.className = 'status-indicator active';
+                
+                updateVideoFeed();
+                showNotification('Camera Connected', 'Successfully connected to camera', 'success');
             } catch (error) {
                 console.error('Error switching to camera:', error);
                 showNotification('Camera Error', 'Failed to switch to camera. Please check your device.', 'error');
+                videoStatus.textContent = 'Failed to switch to camera';
+                videoStatus.style.color = 'var(--danger)';
             }
         }
 
-        document.getElementById('switchToCamera').addEventListener('click', switchToCamera);
+        // Event Listeners
+        cameraBtn.addEventListener('click', async function() {
+            try {
+                const hasPermission = await checkCameraPermission();
+                if (!hasPermission) {
+                    permissionOverlay.style.display = 'flex';
+                } else {
+                    await switchToCamera();
+                }
+            } catch (error) {
+                console.error('Error checking camera permission:', error);
+                showNotification('Permission Error', 'Failed to check camera permissions', 'error');
+            }
+        });
 
-        document.getElementById('videoUpload').addEventListener('change', function(e) {
+        allowCamera.addEventListener('click', async function() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop());
+                permissionOverlay.style.display = 'none';
+                await switchToCamera();
+            } catch (err) {
+                console.error('Camera permission denied:', err);
+                permissionOverlay.style.display = 'none';
+                videoStatus.textContent = 'Camera access denied';
+                videoStatus.style.color = 'var(--danger)';
+                showNotification('Permission Denied', 'Camera access was denied. Please allow camera access in your browser settings.', 'error');
+            }
+        });
+
+        denyCamera.addEventListener('click', function() {
+            permissionOverlay.style.display = 'none';
+            videoStatus.textContent = 'Camera access denied';
+            videoStatus.style.color = 'var(--danger)';
+            showNotification('Permission Denied', 'Camera access was denied. You can try again later.', 'warning');
+        });
+
+        videoUpload.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
                 currentVideoSource = 'file';
@@ -728,7 +835,8 @@
                 const progressBar = document.querySelector('.progress-bar');
                 progressDiv.style.display = 'block';
                 
-                // Show upload progress
+                videoStatus.textContent = 'Uploading video...';
+                
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', '/upload_video', true);
                 
@@ -746,12 +854,10 @@
                             showNotification('Upload Error', data.error, 'error');
                             switchToCamera(); // Fallback to camera on error
                         } else {
-                            document.getElementById('videoSource').textContent = file.name;
-                            document.getElementById('videoFPS').textContent = data.fps.toFixed(2);
-                            document.getElementById('videoDuration').textContent = formatDuration(data.duration);
+                            videoSource.textContent = file.name;
+                            videoStatus.textContent = 'Processing video...';
+                            videoStatus.style.color = 'var(--success)';
                             
-                            // Update camera status for file
-                            const cameraStatus = document.getElementById('cameraStatus');
                             cameraStatus.innerHTML = '<i class="fas fa-file-video"></i><span>Video File</span>';
                             cameraStatus.className = 'status-indicator active';
                             
@@ -780,7 +886,21 @@
         videoElement.addEventListener('error', handleVideoError);
 
         // Initialize camera on page load
-        switchToCamera();
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                const hasPermission = await checkCameraPermission();
+                if (hasPermission) {
+                    await switchToCamera();
+                } else {
+                    videoStatus.textContent = 'Waiting for camera permission';
+                    videoStatus.style.color = 'var(--warning)';
+                    showNotification('Camera Access Required', 'Please click the Live Camera button to grant camera access', 'warning');
+                }
+            } catch (error) {
+                console.error('Error during initialization:', error);
+                showNotification('Initialization Error', 'Failed to initialize camera', 'error');
+            }
+        });
 
         // Periodically refresh the video feed to prevent disconnection
         setInterval(() => {
